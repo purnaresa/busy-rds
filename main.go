@@ -59,7 +59,7 @@ func loadConfig(filename string) (Config, error) {
 func main() {
 	createDatabase(dbPool, "main")
 	createTableIfNotExists(dbPool)
-	generateDummyData(dbPool, 10)
+	generateDummyData(dbPool, 1)
 	readBusyTable(dbPool)
 }
 
@@ -103,10 +103,13 @@ func generateDummyData(db *sql.DB, n int) {
 	stmt := `INSERT INTO busy (description, status) VALUES ($1, $2)`
 
 	for i := 0; i < n; i++ {
-		_, err := db.Exec(stmt, faker.Sentence(), "idle")
+		// Generate dummy data
+		data := faker.Email()
+		_, err := db.Exec(stmt, data, "idle")
 		if err != nil {
 			log.Fatal(err)
 		}
+		log.Println(data)
 	}
 
 	fmt.Printf("%d rows of dummy data inserted into busy table\n", n)
@@ -120,7 +123,7 @@ type BusyRow struct {
 }
 
 func readBusyTable(db *sql.DB) {
-	rows, err := db.Query("SELECT * FROM busy")
+	rows, err := db.Query("SELECT * FROM busy ORDER BY id desc limit 1")
 	if err != nil {
 		log.Fatal(err)
 	}
