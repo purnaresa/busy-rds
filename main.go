@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"time"
 
 	faker "github.com/bxcodec/faker/v3"
 	_ "github.com/lib/pq"
@@ -14,19 +15,30 @@ import (
 
 var (
 	dbPool *sql.DB
+	config Config
+	delay  float64
 )
 
 type Config struct {
 	Database struct {
 		DSN string `json:"dsn"`
 	} `json:"database"`
+	TestRun    int `json:"test_run"`
+	RPS        int `json:"rps"`
+	MaxRetry   int `json:"max_retry"`
+	DelayRetry int `json:"delay_retry"`
 }
 
 func init() {
-	config, err := loadConfig("config.json")
+
+	err := error(nil)
+	config, err = loadConfig("config.json")
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	delay = 1000 / float64(config.RPS)
+	log.Printf("delay : %v", delay)
 
 	dbPool, err = sql.Open("postgres", config.Database.DSN)
 	if err != nil {
@@ -53,14 +65,29 @@ func loadConfig(filename string) (Config, error) {
 	}
 
 	err = json.Unmarshal(data, &config)
+	log.Printf("Config : %+v", config)
 	return config, err
 }
 
 func main() {
 	createDatabase(dbPool, "main")
 	createTableIfNotExists(dbPool)
-	generateDummyData(dbPool, 1)
-	readBusyTable(dbPool)
+	writeData()
+
+}
+
+func writeData() {
+	log.Printf("================\n Start Write Data Simulation")
+	startTime := time.Now()
+	log.Println("Start time: ", startTime)
+	for i := 0; i < config.TestRun; i++ {
+		generateDummyData(dbPool, 1)
+		time.Sleep(time.Duration(delay) * time.Millisecond)
+
+	}
+	duration := time.Since(startTime)
+	log.Printf("End time: %v \n", time.Now())
+	log.Printf("Duration: %s\n", duration)
 }
 
 func createDatabase(db *sql.DB, dbName string) {
@@ -96,23 +123,42 @@ func createTableIfNotExists(db *sql.DB) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Table busy created successfully")
+	log.Println("Table busy is ready")
 }
 
 func generateDummyData(db *sql.DB, n int) {
 	stmt := `INSERT INTO busy (description, status) VALUES ($1, $2)`
 
 	for i := 0; i < n; i++ {
-		// Generate dummy data
+
 		data := faker.Email()
-		_, err := db.Exec(stmt, data, "idle")
-		if err != nil {
-			log.Fatal(err)
+		retryCount := 1
+		lastError := time.Now()
+		for {
+			_, err := db.Exec(stmt, data, "idle")
+			if err != nil {
+				if retryCount == 1 {
+					lastError = time.Now()
+				}
+				if retryCount >= config.MaxRetry {
+					log.Fatalf("Failed to insert data: %s. Error: %v\n", data, err)
+				}
+
+				log.Printf("Failed to insert: %s. Error: %v. Retrying (%d/%d)...\n", data, err, retryCount, config.MaxRetry)
+				retryCount++
+				time.Sleep(time.Duration(config.DelayRetry) * time.Second)
+
+			} else {
+				if retryCount > 1 {
+					downTime := time.Since(lastError).Milliseconds()
+					log.Printf("DownTime: %dms\n", downTime)
+				}
+				log.Printf("Insert: %s success\n", data)
+				break
+			}
 		}
-		log.Println(data)
 	}
 
-	fmt.Printf("%d rows of dummy data inserted into busy table\n", n)
 }
 
 type BusyRow struct {
