@@ -1,7 +1,3 @@
-Sure, here is a more readable version of your repository's README file. I've made a few grammatical corrections and added more descriptive titles and subheadings for improved organization and readability:
-
----
-
 # Busy RDS - A Simulation Tool for Database Workloads
 
 ## Introduction
