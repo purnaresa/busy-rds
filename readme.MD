@@ -9,14 +9,14 @@ Amazon RDS provides a plethora of features to enhance the resilience and availab
 ## Key Features
 Busy RDS supports the following simulations:
 
-1. **Generating Dummy Data** 
-2. **Simulating RDS Failover**
+1. **Dummy Data Generator** 
+2. **RDS Failover Simulator**
 
 ---
 
 ## Usage Instructions
 
-### 1. Generating Dummy Data 
+### 1. Dummy Data Generator
 This simulation creates dummy data for a specific database server. The process involves creating a new database, building a new table, and then populating it with dummy data based on the `test_run` parameter.
 
 #### Configuration
@@ -41,7 +41,7 @@ This simulation creates dummy data for a specific database server. The process i
 
 ---
 
-### 2. RDS Failover Simulation
+### 2. RDS Failover Simulator
 This simulation tests the behavior of Aurora during a failover event. It starts by writing data continuously at a normal day's request per second (RPS) rate. In the event of a failover, the simulation will attempt to retry the insert operation until a connection to the new writer is established.
 
 #### Configuration
@@ -52,6 +52,7 @@ This simulation tests the behavior of Aurora during a failover event. It starts 
 - **delay_retry** : Time the application should wait before retrying.
 
 #### Example Output
+Example 1: Application not cache the DNS or cache released at the same time the new instance ready
 ```
 ...
 2023/06/13 01:43:55 Insert: EkSJfxm@uPYqRyB.net success
@@ -65,6 +66,31 @@ This simulation tests the behavior of Aurora during a failover event. It starts 
 2023/06/13 01:44:04 **DownTime: 6330ms**
 2023/06/13 01:44:04 Insert: fJhsibD@UaHySaY.net success
 2023/06/13 01:44:05 Insert: ddZxldB@HJEiRLg.info success
+...
+```
+Example 2: Application cache the DNS
+```
+...
+2023/06/19 00:42:40 RDS address:  13.228.85.227
+...
+2023/06/19 00:42:46 Insert: toTdGMs@DQgZpUH.biz success
+2023/06/19 00:42:46 Insert: lPoNgDT@QKhNere.net success
+2023/06/19 00:42:47 Insert: doyEoaX@GXcdihg.com success
+2023/06/19 00:42:49 Failed to insert: eFfTjPx@UEGubMY.net. Error: [dial tcp 13.228.85.227:5432: connect: connection refused]. Retrying (1/60)...
+2023/06/19 00:42:50 Failed to insert: eFfTjPx@UEGubMY.net. Error: [dial tcp 13.228.85.227:5432: connect: connection refused]. Retrying (2/60)...
+2023/06/19 00:42:51 Failed to insert: eFfTjPx@UEGubMY.net. Error: [dial tcp 13.228.85.227:5432: connect: connection refused]. Retrying (3/60)...
+2023/06/19 00:42:52 Failed to insert: eFfTjPx@UEGubMY.net. Error: [dial tcp 13.228.85.227:5432: connect: connection refused]. Retrying (4/60)...
+2023/06/19 00:42:53 Failed to insert: eFfTjPx@UEGubMY.net. Error: [dial tcp 13.228.85.227:5432: connect: connection refused]. Retrying (5/60)...
+2023/06/19 00:42:54 Failed to insert: eFfTjPx@UEGubMY.net. Error: [dial tcp 13.228.85.227:5432: connect: connection refused]. Retrying (6/60)...
+2023/06/19 00:42:55 Failed to insert: eFfTjPx@UEGubMY.net. Error: [dial tcp 13.228.85.227:5432: connect: connection refused]. Retrying (7/60)...
+2023/06/19 00:42:58 Failed to insert: eFfTjPx@UEGubMY.net. Error: [pq: the database system is starting up]. Retrying (8/60)...
+2023/06/19 00:42:59 Failed to insert: eFfTjPx@UEGubMY.net. Error: [pq: cannot execute INSERT in a read-only transaction]. Retrying (9/60)...
+2023/06/19 00:42:59 RDS address:  13.228.85.227
+2023/06/19 00:43:00 Failed to insert: eFfTjPx@UEGubMY.net. Error: [pq: cannot execute INSERT in a read-only transaction]. Retrying (10/60)...
+2023/06/19 00:43:01 RDS address:  13.251.145.43
+2023/06/19 00:43:02 DownTime: 13303ms
+2023/06/19 00:43:02 Insert: eFfTjPx@UEGubMY.net success
+2023/06/19 00:43:03 Insert: qbDwKIy@OaVfDwL.org success
 ...
 ```
 

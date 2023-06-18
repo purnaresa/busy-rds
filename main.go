@@ -3,8 +3,9 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -38,7 +39,12 @@ func init() {
 	}
 
 	delay = 1000 / float64(config.RPS)
-	log.Printf("delay : %v", delay)
+	connectDB()
+	fmt.Println("Successfully connected to the database")
+}
+
+func connectDB() {
+	err := error(nil)
 
 	dbPool, err = sql.Open("postgres", config.Database.DSN)
 	if err != nil {
@@ -48,7 +54,6 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Successfully connected to the database")
 }
 
 func loadConfig(filename string) (Config, error) {
@@ -59,7 +64,7 @@ func loadConfig(filename string) (Config, error) {
 	}
 	defer file.Close()
 
-	data, err := ioutil.ReadAll(file)
+	data, err := io.ReadAll(file)
 	if err != nil {
 		return config, err
 	}
@@ -70,18 +75,51 @@ func loadConfig(filename string) (Config, error) {
 }
 
 func main() {
-	createDatabase(dbPool, "main")
+
+	usecasePtr := flag.Int("usecase", 0, "a usecase number")
+
+	// Parse the flags
+	flag.Parse()
+
+	// Print the flag
+	fmt.Println("Usecase:", *usecasePtr)
+
+	// Do something based on the usecase value
+	createDatabase(dbPool, "busy_db")
 	createTableIfNotExists(dbPool)
-	writeData()
+	switch *usecasePtr {
+	case 1:
+		log.Println("Dummy Data Generator")
+		dataGenerator()
+	case 2:
+		log.Println("RDS Failover Simulator")
+		failoverSimulator()
+	default:
+		fmt.Println("Unknown usecase selected.")
+	}
 
 }
 
-func writeData() {
-	log.Printf("================\n Start Write Data Simulation")
+func dataGenerator() {
+	log.Println("==============")
+	log.Println("Start Dummy Data Generator")
 	startTime := time.Now()
 	log.Println("Start time: ", startTime)
 	for i := 0; i < config.TestRun; i++ {
-		generateDummyData(dbPool, 1)
+		generateDummyData()
+	}
+	duration := time.Since(startTime)
+	log.Printf("End time: %v \n", time.Now())
+	log.Printf("Duration: %s\n", duration)
+}
+
+func failoverSimulator() {
+	log.Println("==============")
+	log.Printf("Start Write Data Simulation at %d RPS", config.RPS)
+	startTime := time.Now()
+	log.Println("Start time: ", startTime)
+	for i := 0; i < config.TestRun; i++ {
+		generateDummyData()
 		time.Sleep(time.Duration(delay) * time.Millisecond)
 
 	}
@@ -112,7 +150,7 @@ func createDatabase(db *sql.DB, dbName string) {
 
 func createTableIfNotExists(db *sql.DB) {
 
-	stmt := `CREATE TABLE IF NOT EXISTS busy(
+	stmt := `CREATE TABLE IF NOT EXISTS busy_table(
 		id SERIAL PRIMARY KEY,
 		description VARCHAR(255),
 		status VARCHAR(50),
@@ -126,37 +164,43 @@ func createTableIfNotExists(db *sql.DB) {
 	log.Println("Table busy is ready")
 }
 
-func generateDummyData(db *sql.DB, n int) {
-	stmt := `INSERT INTO busy (description, status) VALUES ($1, $2)`
+func generateDummyData() {
+	stmt := `INSERT INTO busy_table (description, status) VALUES ($1, $2)`
 
-	for i := 0; i < n; i++ {
-
-		data := faker.Email()
-		retryCount := 1
-		lastError := time.Now()
-		for {
-			_, err := db.Exec(stmt, data, "idle")
-			if err != nil {
-				if retryCount == 1 {
-					lastError = time.Now()
-				}
-				if retryCount >= config.MaxRetry {
-					log.Fatalf("Failed to insert data: %s. Error: %v\n", data, err)
-				}
-
-				log.Printf("Failed to insert: %s. Error: %v. Retrying (%d/%d)...\n", data, err, retryCount, config.MaxRetry)
-				retryCount++
-				time.Sleep(time.Duration(config.DelayRetry) * time.Second)
-
-			} else {
-				if retryCount > 1 {
-					downTime := time.Since(lastError).Milliseconds()
-					log.Printf("DownTime: %dms\n", downTime)
-				}
-				log.Printf("Insert: %s success\n", data)
-				break
+	data := faker.Email()
+	retryCount := 1
+	lastError := time.Now()
+	for {
+		_, err := dbPool.Exec(stmt, data, "idle")
+		if err != nil {
+			if retryCount == 1 {
+				lastError = time.Now()
 			}
+			if retryCount >= config.MaxRetry {
+				log.Fatalf("Failed to insert data: %s. Error: [%v]\n", data, err)
+			}
+
+			log.Printf("Failed to insert: %s. Error: [%v]. Retrying (%d/%d)...\n", data, err, retryCount, config.MaxRetry)
+
+			if err.Error() == "pq: cannot execute INSERT in a read-only transaction" {
+				dbPool.Close()
+				dbPool = nil
+				connectDB()
+			}
+
+			retryCount++
+			time.Sleep(time.Duration(config.DelayRetry) * time.Second)
+
+		} else {
+			if retryCount > 1 {
+				downTime := time.Since(lastError).Milliseconds()
+				retryCount = 1
+				log.Printf("DownTime: %dms\n", downTime)
+			}
+			log.Printf("Insert: %s success\n", data)
+			break
 		}
+
 	}
 
 }
